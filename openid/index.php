@@ -1,8 +1,9 @@
 <?php
 
-include_once ('OpenID/AX.php');
-include_once ('OpenID/google_discovery.php');
-include_once ('../opsworks.php');
+include_once ('Auth/OpenID/AX.php');
+include_once ('Auth/OpenID/google_discovery.php');
+include_once ('Auth/OpenID/FileStore.php');
+include_once ('../config.inc.php');
 
 function get_oid_store() {
    /**
@@ -43,11 +44,11 @@ function get_oid_store() {
 /* Need to have cookie visible from parent directory */
 session_set_cookie_params(0, '/', '', 0);
 /* Create signon session */
-$session_name = 'SignonSession';
+$session_name = 'PMA_OpenID_Session';
 session_name($session_name);
 session_start();
 
-// Determine realm and return_to
+// Determine the URLs
 $base = 'http';
 if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') {
     $base .= 's';
@@ -59,27 +60,25 @@ $returnTo = $base . dirname($_SERVER['PHP_SELF']);
 if ($returnTo[strlen($returnTo) - 1] != '/') {
     $returnTo .= '/';
 }
-$returnTo .= 'openid';
 
 // Start the OpenID stuff
-if (count($_GET) == 0) {
+if (count($_GET) < 3) {
   $consumer = new Auth_OpenID_Consumer(get_oid_store());
   new GApps_OpenID_Discovery($consumer, array('/etc/ssl/certs'));
   $auth_request = $consumer->begin('midwestfleet.com');
 
-  header('Location: ' + $auth_request->redirectURL('http://*.m2.midwestfleet.com', $returnTo));
+  header('Location: ' . $auth_request->redirectURL('http://*.' . MfsConfig::$url, $returnTo));
 } else { // Finish the process
   $consumer = new Auth_OpenID_Consumer(get_oid_store());
   new GApps_OpenID_Discovery($consumer, array('/etc/ssl/certs'));
   $response = $consumer->complete($returnTo);
 
   if ($response->status == Auth_OpenID_SUCCESS) {
-    $cfg = new OpsWorksDb();
-    $_SESSION['PMA_single_signon_user'] = $cfg->username;
-    $_SESSION['PMA_single_signon_password'] = $cfg->password;
+    $_SESSION['PMA_single_signon_user'] = MfsConfig::$database['username'];
+    $_SESSION['PMA_single_signon_password'] = MfsConfig::$database['password'];
     session_write_close();
 
-    header('Location: ' + $returnTo);
+    header('Location: ' . $base);
   } else {
     exit;
   }

@@ -21,7 +21,7 @@ require_once "Auth/OpenID/Discover.php";
 /**
  * Helper class for setting up Auth_OpenID_Consumer instances configured for
  * use with Google Apps as the default IDP.  Allows discovery of the IDP for
- * any Google Apps hosted domain by supplying just the domain name (e.g. 'acmecorp.com') 
+ * any Google Apps hosted domain by supplying just the domain name (e.g. 'acmecorp.com')
  *
  * Implements the discovery protocol for Google Apps hosted domains described at
  * http://groups.google.com/group/google-federated-login-api/web/openid-discovery-for-hosted-domains
@@ -35,7 +35,7 @@ require_once "Auth/OpenID/Discover.php";
  *   $helper = new GApps_OpenID_Discovery($consumer, array('/etc/ssl/certs'), $memcache);
  *   // Use consumer
  *   $auth_request = $consumer->begin(...);
- */ 
+ */
 class GApps_OpenID_Discovery {
     const DESCRIBED_BY_TYPE = 'http://www.iana.org/assignments/relation/describedby';
     const HOSTED_ID = 'hosted-id.google.com';
@@ -44,20 +44,20 @@ class GApps_OpenID_Discovery {
     const USER_URI_VAR = '{%uri}';
     const CACHE_EXPIRY = 3600; // 1 hr
     const CACHE_PREFIX = '_gapps_openid_';
-    
+
     var $host_meta_template = 'https://www.google.com/accounts/o8/.well-known/host-meta?hd=%s';
     var $memcache = null;
     var $verifier = null;
 
     /**
      * Initializes the helper and modifies the consumer instance to enable
-     * OpenID discovery for Google Apps hosted domains. 
+     * OpenID discovery for Google Apps hosted domains.
      *
      * @param Auth_OpenID_Consumer $consumer Consumer instance to enable
      * Google Apps support for.
      * @param array(str) $ca_dirs Array of directories containing trusted
      * root certificates (refer to OpenSSL documentation)
-     * @param memcache $memcache Optional memcache handle for caching 
+     * @param memcache $memcache Optional memcache handle for caching
      * discovery information.
      */
     function GApps_OpenID_Discovery($consumer, $trust_roots = null, $memcache = null) {
@@ -66,44 +66,44 @@ class GApps_OpenID_Discovery {
         $consumer->discoverMethod = array($this, 'discover');
         $consumer->consumer->discoverMethod = array($this, 'discover');
     }
-    
+
     /**
      * Discovery implementation that supports Google Apps hosted domains.
      * This discovery method will fall back to Auth_OpenID_discover if the id is not
      * a valid Google Apps hosted domain.
-     * 
+     *
      * @param str $url Either the domain name of the Google Apps domain or an OpenID id to discover
      * @param Auth_Yadis_HTTPFetcher &$fetcher HTTP client for fetching discovery information.
      * @return array(str,array(Auth_OpenID_ServiceEndpoint))
-     */ 
+     */
     function discover($url, &$fetcher) {
         try {
-            return $this->perform_discovery($url, &$fetcher);
-        } catch (GApps_Discovery_Exception $e) {            
+            return $this->perform_discovery($url, $fetcher);
+        } catch (GApps_Discovery_Exception $e) {
         }
         // Fallback to default discovery mechanism from php-openid
-        return Auth_OpenID_discover($url, &$fetcher);
+        return Auth_OpenID_discover($url, $fetcher);
     }
 
     /**
      * Does either site discovery or user discovery depending on the url.  URLs
      * in the form http://domain.com/openid/... are treated as claimed IDs and
      * use the user discovery method outlined in the discovery algorihm docs.
-     * 
+     *
      * Other values are treated as domain names and used for site discovery.
      *
      * @access private
      * @param str $url Either the domain name of the Google Apps domain or an OpenID id to discover
      * @param Auth_Yadis_HTTPFetcher &$fetcher HTTP client for fetching discovery information.
      * @return array(str,array(Auth_OpenID_ServiceEndpoint))
-     */ 
-    function &perform_discovery($url, &$fetcher) {
+     */
+    function perform_discovery($url, &$fetcher) {
         if (preg_match('_^.*://(.*?)/.*_', $url, $matches)) {
             $domain = $matches[1];
             $claimed_id = $url;
-            return $this->discover_user($domain, $claimed_id, &$fetcher);
-        } 
-        return $this->discover_site($url, &$fetcher);
+            return $this->discover_user($domain, $claimed_id, $fetcher);
+        }
+        return $this->discover_site($url, $fetcher);
     }
 
     /*
@@ -114,9 +114,9 @@ class GApps_OpenID_Discovery {
      * @param Auth_Yadis_HTTPFetcher &$fetcher HTTP client for fetching discovery information.
      * @return array(str,array(Auth_OpenID_ServiceEndpoint))
      */
-    function &discover_site($domain, &$fetcher) {
-        $url = $this->fetch_host_meta($domain, &$fetcher);
-        $xrds =& $this->fetch_xrds_services($domain, $url, &$fetcher);
+    function discover_site($domain, &$fetcher) {
+        $url = $this->fetch_host_meta($domain, $fetcher);
+        $xrds =& $this->fetch_xrds_services($domain, $url, $fetcher);
         $services = $xrds->services(array('filter_MatchesAnyOpenIDType'));
         $endpoints = Auth_OpenID_makeOpenIDEndpoints($domain, $services);
         return array($url, $endpoints);
@@ -131,11 +131,11 @@ class GApps_OpenID_Discovery {
      * @param Auth_Yadis_HTTPFetcher &$fetcher HTTP client for fetching discovery information.
      * @return array(str,array(Auth_OpenID_ServiceEndpoint))
      */
-    function &discover_user($domain, $claimed_id, &$fetcher) {
-        $site_url = $this->fetch_host_meta($domain, &$fetcher);
-        $site_xrds =& $this->fetch_xrds_services($domain, $site_url, &$fetcher);
-        list($user_url,$next_authority) = $this->get_user_xrds_url(&$site_xrds, $claimed_id);
-        $user_xrds =& $this->fetch_xrds_services($next_authority, $user_url, &$fetcher, false);
+    function discover_user($domain, $claimed_id, &$fetcher) {
+        $site_url = $this->fetch_host_meta($domain, $fetcher);
+        $site_xrds =& $this->fetch_xrds_services($domain, $site_url, $fetcher);
+        list($user_url,$next_authority) = $this->get_user_xrds_url($site_xrds, $claimed_id);
+        $user_xrds =& $this->fetch_xrds_services($next_authority, $user_url, $fetcher, false);
         if ($user_xrds != null) {
             $services = $user_xrds->services(array('filter_MatchesAnyOpenIDType'));
             $endpoints = Auth_OpenID_makeOpenIDEndpoints($claimed_id, $services);
@@ -146,7 +146,7 @@ class GApps_OpenID_Discovery {
 
     /*
      * Fetches the location of the site XRDS file, using the well known location
-     * hosted by Google.  Returns a URL to the XRDS for the domain. 
+     * hosted by Google.  Returns a URL to the XRDS for the domain.
      *
      * @access private
      * @param str $domain Domain name to perform discovery on
@@ -184,8 +184,9 @@ class GApps_OpenID_Discovery {
         if ($url == null) {
             throw new GApps_Discovery_Exception("Invalid null URL");
         }
+        $body = null;
         if ($use_cache) {
-            $body = $this->get_cache($url);            
+            $body = $this->get_cache($url);
         }
         if ($body == null) {
             $http_resp = @$fetcher->get($url);
@@ -203,7 +204,7 @@ class GApps_OpenID_Discovery {
             }
             // Signature valid and signed by trusted root by this point.
             if ($use_cache) {
-                $this->put_cache($url,$body);   
+                $this->put_cache($url,$body);
             }
         }
         $xrds =& Auth_Yadis_XRDS::parseXRDS($body);
@@ -237,8 +238,8 @@ class GApps_OpenID_Discovery {
                 return array($url, $authority);
             }
         }
-    }    
-    
+    }
+
     /*
      * Helper for getting items from cache, if enabled.
      *
@@ -252,7 +253,7 @@ class GApps_OpenID_Discovery {
         }
         return $this->memcache->get(GApps_OpenID_Discovery::CACHE_PREFIX.$key);
     }
-    
+
     /*
      * Helper for putting items in cache, if enabled.
      *
@@ -276,9 +277,9 @@ class GApps_OpenID_SimpleSign {
     const SIGN_RSA_SHA1 = 'http://www.w3.org/2000/09/xmldsig#rsa-sha1';
     const NS_DSIG = 'http://www.w3.org/2000/09/xmldsig#';
     const NS_XRDS = 'xri://$xrds';
-    
+
     var $trust_roots;
-    
+
     /**
      * Initialize with the location of trusted CAs.  Refer to OpenSSL docs for details
      * on managing trusted root certificates.
@@ -287,7 +288,7 @@ class GApps_OpenID_SimpleSign {
      */
     function GApps_OpenID_SimpleSign($trust_roots = null) {
         $this->trust_roots = $trust_roots;
-        if ($this->trust_roots == null) { 
+        if ($this->trust_roots == null) {
             $this->trust_roots = array(dirname(__FILE__)."/ca-bundle.crt");
         }
     }
@@ -372,14 +373,14 @@ class GApps_OpenID_SimpleSign {
         $handle = fopen($fname,"w");
         if ($handle) {
             fwrite($handle,$chain);
-            fclose($handle);            
-            return $fname;        
+            fclose($handle);
+            return $fname;
         }
     }
 
     function validate_chain($certs) {
         // Since we may have multiple certs in the XML, save the chain to a temp file
-        // so we an pass as a list of untrusted certs to verify. 
+        // so we an pass as a list of untrusted certs to verify.
         $untrusted_file = $this->save_cert_chain($certs);
         $trusted = openssl_x509_checkpurpose($certs[0], X509_PURPOSE_ANY, $this->trust_roots, $untrusted_file);
         unlink($untrusted_file);
@@ -389,7 +390,7 @@ class GApps_OpenID_SimpleSign {
     /**
      * Verifies the signature of the document and that the signing certificate
      * stems from a trusted root CA.
-     * 
+     *
      * Returns the CN of the signing certificate if valid.
      *
      * @param str $xml XML doc to verify
@@ -399,10 +400,10 @@ class GApps_OpenID_SimpleSign {
     function verify($xml, $signature_value) {
         $doc = $this->parse_doc($xml);
         $xp = $this->get_xpath($doc);
-        
+
         $valid = $this->validate_xml($xp);
         $certs = $this->parse_certificates($xp);
-        
+
         $cert = openssl_x509_read($certs[0]);
         $parsed_certificate = openssl_x509_parse($cert);
         $pubkey = openssl_pkey_get_public($cert);
@@ -415,15 +416,15 @@ class GApps_OpenID_SimpleSign {
         if (!$valid) {
             throw new GApps_Discovery_Exception("Signature verification failed.");
         }
-        
+
         $trusted = $this->validate_chain($certs);
         if (!$trusted) {
             throw new GApps_Discovery_Exception("Can not verify trust chian.");
         }
         $subject = $parsed_certificate["subject"];
-        $signed_by = strtolower($subject["CN"]);                
+        $signed_by = strtolower($subject["CN"]);
         return $signed_by;
-    }    
+    }
 }
 
 class GApps_Discovery_Exception extends Exception {}
